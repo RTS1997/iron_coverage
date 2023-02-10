@@ -29,7 +29,7 @@ input_dir = file(params.input_fld.replaceAll('/$',''))
 assert input_dir.isDirectory()
 
 // results directory
-output_dir = "$baseDir/results/${input_dir.getName()}"
+output_dir = "$baseDir/${input_dir.getName()}"
 
 // Process to map the reads against the assembled genome using minimap2
 process map_reads {
