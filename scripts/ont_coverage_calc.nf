@@ -34,7 +34,6 @@ output_dir = "$baseDir/results/${input_dir.getName()}"
 // Process to map the reads against the assembled genome using minimap2
 process map_reads {
 
-    label 'q30m'
     conda "conda_envs/read_map.yml"
 
     input:
@@ -52,7 +51,6 @@ process map_reads {
 // Process to sort the mapped reads and create a BAM file
 process sort_mapped_reads {
 
-    label 'q30m'
     conda "conda_envs/read_map.yml"
 
     input:
@@ -70,7 +68,6 @@ process sort_mapped_reads {
 // Process to calculate the average read depth and standard deviation.
 process average_read_depth {
 
-    label 'q30m'
     conda "conda_envs/read_map.yml"
 
 
@@ -86,4 +83,33 @@ process average_read_depth {
         """
         samtools depth reads.sorted.bam  |  awk '{sum+=$3; sumsq+=$3*$3} END { print "Average = ",sum/NR; print "Stdev = ",sqrt(sumsq/NR - (sum/NR)**2)}'
         """
+}
+
+// Main workflow for the program, executes the required processes
+workflow pileup_workflow {
+    main:
+
+        // reads input channel. Has items [vial, timepoint, reads]
+        reads = Channel.fromPath("${input_dir}/reads.fastq.gz")
+
+        // filtered so that only the first timepoint is kept
+        assembled_genomes = Channel.fromFilePairs("${input_dir}/*.{fna,gbk}")
+            .map {it -> it[1] } // only file pair
+
+        // combine genomes with reads, using vial as common key.
+        // Each set of reads is assigned the rescpective reference genome
+        combined = assembled_genomes.cross(reads) {it -> it.vial }
+
+        // create symlinks of reference genomes and reads
+        create_symlinks(combined)
+        
+        // map and sort reads
+        sorted_reads = map_reads(combined) | sort_mapped_reads
+
+        // create index for sorted reads
+        indexed_reads = index_sorted_reads(sorted_reads)
+
+        // perform pileup and list unmapped and non-primary reads
+        pileup(indexed_reads)
+
 }
