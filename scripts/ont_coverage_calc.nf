@@ -44,7 +44,7 @@ process map_reads {
 
     script:
         """
-        minimap2 -a -x map-ont -t ${task.cpus} $genome_fa $reads > reads.sam
+        minimap2 -a -x map-ont $genome_fa $reads > reads.sam
         """
 }
 
@@ -61,7 +61,7 @@ process sort_mapped_reads {
 
     script:
         """
-        samtools sort -@ ${task.cpus} reads.sam > reads.sorted.bam
+        samtools sort reads.sam > reads.sorted.bam
         """
 }
 
@@ -89,16 +89,14 @@ process average_read_depth {
 workflow pileup_workflow {
     main:
 
-        // reads input channel. Has items [vial, timepoint, reads]
+        // reads input channel. Has items [reads]
         reads = Channel.fromPath("${input_dir}/reads.fastq.gz")
 
         // filtered so that only the first timepoint is kept
         assembled_genomes = Channel.fromFilePairs("${input_dir}/*.{fna,gbk}")
-            .map {it -> it[1] } // only file pair
 
-        // combine genomes with reads, using vial as common key.
-        // Each set of reads is assigned the rescpective reference genome
-        combined = assembled_genomes.cross(reads) {it -> it.vial }
+        // combine genomes with reads
+        combined = assembled_genomes.cross(reads)
 
         // create symlinks of reference genomes and reads
         create_symlinks(combined)
@@ -107,9 +105,6 @@ workflow pileup_workflow {
         sorted_reads = map_reads(combined) | sort_mapped_reads
 
         // create index for sorted reads
-        indexed_reads = index_sorted_reads(sorted_reads)
-
-        // perform pileup and list unmapped and non-primary reads
-        pileup(indexed_reads)
+        depth_reads = average_read_depth(sorted_reads)
 
 }
